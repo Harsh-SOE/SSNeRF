@@ -343,14 +343,11 @@ def run_pseudo_label_pipeline(
     stats = {}
 
     for image_name in tqdm(image_names, desc="Pseudo-labels"):
-        img_path  = resized_path / image_name
-        mask_path = mask_path / image_name
+        image_path  = resized_path / image_name
+        image_mask_path = mask_path / image_name
 
-        print(img_path)
-        print(mask_path)
-
-        img_full = cv2.imread(img_path)
-        raw_mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
+        img_full = cv2.imread(image_path)
+        raw_mask = cv2.imread(image_mask_path, cv2.IMREAD_GRAYSCALE)
 
 
         if img_full is None or raw_mask is None:
@@ -361,10 +358,10 @@ def run_pseudo_label_pipeline(
         img_rgb = cv2.cvtColor(img_full, cv2.COLOR_BGR2RGB)
 
         if image_name == 'top.png':
-            label_map    = generate_topview_label(img_path, mask_path)
+            label_map    = generate_topview_label(image_path, image_mask_path)
             leaf_tip_pts = []
         else:
-            label_map, leaf_tip_pts = generate_morphology_label(img_path, mask_path)
+            label_map, leaf_tip_pts = generate_morphology_label(image_path, image_mask_path)
             if use_sam and predictor is not None:
                 label_map = refine_leaves_with_sam(
                     img_rgb, label_map, mask, leaf_tip_pts, predictor)
