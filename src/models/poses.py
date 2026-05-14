@@ -53,26 +53,27 @@ def axis_angle_to_matrix(vec: torch.Tensor) -> torch.Tensor:
 
 
 
-def build_initial_poses(views: List[str], plant_target: np.ndarray, cfg: Config):
+def build_initial_poses(image_names: List[str], plant_target: np.ndarray, cfg: Config):
     poses = {}
     radius = cfg.camera.camera_radius
 
-    for view in views:
-        if view == 'top' and cfg.rotation.use_top_view:
+    for image_name in image_names:
+        if image_name == 'top.png' and cfg.rotation.use_top_view:
             eye = plant_target + np.array([0.0, radius * 1.25, 0.15], dtype=np.float32)
-            poses[view] = look_at(
+            poses[image_name] = look_at(
                 eye,
                 target=plant_target,
                 up=np.array([0., 0., 1.], dtype=np.float32)
             )
         else:
-            ar = math.radians(int(view))
+            rotation_angle = image_name.split('.')[0]
+            ar = math.radians(int(rotation_angle))
             eye = plant_target + np.array([
                 radius * math.sin(ar),
                 0.0,
                 radius * math.cos(ar)
             ], dtype=np.float32)
 
-            poses[view] = look_at(eye, target=plant_target)
+            poses[rotation_angle] = look_at(eye, target=plant_target)
 
     return poses

@@ -10,10 +10,11 @@ from src.config.project import Config
 
 class PlantDataset:
     def __init__(
-            self, views: List[str], 
+            self, 
+            image_names: List[str], 
             poses: Dict, 
             resized_path: Path, 
-            mask_dir: Path, 
+            mask_path: Path, 
             label_path: Path,
             cfg: Config
             ):
@@ -21,24 +22,30 @@ class PlantDataset:
         views: list of views to load. Defaults to all available views.
         """
 
-        self.views = []
+        self.image_names = []
         str_poses_keys = [str(k) for k in poses.keys()] 
 
-        for view in views:
-            img_path = resized_path / view
-            mask_path = mask_dir / view
-            label_path = label_path / view.replace('.png', '.npy')
+        for image_name in image_names:
+            img_path = resized_path / image_name
+            image_mask_path = mask_path / image_name
+            image_label_path = label_path / image_name.replace('.png', '.npy')
 
-            if not img_path.exists() or not mask_path.exists() or not label_path.exists():
-                print(f'  Skipping missing view files: {view}')
+            if not img_path.exists():
+                print(f'  Skipping missing view files: {image_name}')
                 continue
-            if str(view) not in str_poses_keys:
-                print(f'  Skipping view without pose: {view}')
+            if not image_mask_path.exists():
+                print(f'  Skipping missing files without masks: {image_name}')
+                continue
+            if not image_label_path.exists():
+                print(f'  Skipping missing files without labels: {image_label_path}')
+                continue
+            if str(image_name.split('.')[0]) not in str_poses_keys:
+                print(f'  Skipping view without pose: {image_name}')
                 continue
 
-            self.views.append(view)
+            self.image_names.append(image_name)
 
-        self.view_to_idx = {k: i for i, k in enumerate(self.views)}
+        self.view_to_idx = {k.split('.')[0]: i for i, k in enumerate(self.image_names)}
 
         self.rays_o = []
         self.rays_d = []
@@ -49,13 +56,13 @@ class PlantDataset:
 
         H = cfg.camera.resized_h
         W = cfg.camera.resized_w
-        print(f'Loading dataset ({len(self.views)} views)...')
+        print(f'Loading dataset ({len(self.image_names)} views)...')
 
-        for view in tqdm(self.views):
-            fname = view
+        for image_name in tqdm(self.image_names):
+            fname = image_name
 
             img_bgr = cv2.imread(resized_path / fname)
-            mask = cv2.imread(label_path / fname, cv2.IMREAD_GRAYSCALE)
+            mask = cv2.imread(mask_path / fname, cv2.IMREAD_GRAYSCALE)
             lmap = np.load(label_path / fname.replace('.png', '.npy'))
 
             if img_bgr is None or mask is None or lmap is None:
@@ -67,13 +74,14 @@ class PlantDataset:
             lmap = lmap.astype(np.int64)
 
             # Ensure we are using the correct key type for the global poses dict
-            pose_key = view if view in poses else str(view)
+            view_key = image_name.split('.')[0]
+            pose_key = view_key if view_key in poses else str(view_key)
             pose = torch.tensor(poses[pose_key], dtype=torch.float32)
 
             ro, rd = get_rays(H, W, cfg.camera.focal_length, pose)
 
             flat_count = ro.reshape(-1, 3).shape[0]
-            view_idx = self.view_to_idx[view]
+            view_idx = self.view_to_idx[view_key]
 
             self.rays_o.append(ro.reshape(-1, 3))
             self.rays_d.append(rd.reshape(-1, 3))

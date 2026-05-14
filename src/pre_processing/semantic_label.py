@@ -415,7 +415,8 @@ def visualize_pipeline_output(
 
         orig    = cv2.cvtColor(orig_bgr, cv2.COLOR_BGR2RGB)
         maskv   = cv2.imread(mask_path / image_name, cv2.IMREAD_GRAYSCALE)
-        lmap    = np.load(label_path / f"{image_name}.npy")
+        map_name = image_name.split('.')[0]
+        lmap    = np.load(label_path / f"{map_name}.npy")
         lvis    = cv2.cvtColor(label_to_color(lmap, cfg=cfg), cv2.COLOR_BGR2RGB)
         overlay = np.clip(orig.astype(float) * 0.5 +
                           lvis.astype(float) * 0.5, 0, 255).astype(np.uint8)

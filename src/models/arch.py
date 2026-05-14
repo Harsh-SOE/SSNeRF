@@ -11,6 +11,7 @@ class SemanticNeRF(nn.Module):
         self.dir_enc  = SmallDirEnc()
         h = self.hash_enc.out_dim   
         d = self.dir_enc.out_dim    
+        self.plant_bound = plant_bound
 
         self.trunk = nn.Sequential(
             nn.Linear(h,  128), nn.SiLU(),
