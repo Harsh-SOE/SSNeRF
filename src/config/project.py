@@ -1,10 +1,10 @@
 import torch
 from dataclasses import dataclass, field
 
-from camera import CameraConfig
-from turn_table import TurnTableConfig
-from training import TrainingConfig
-from semantic import SemanticConfig
+from src.config.camera import CameraConfig
+from src.config.turn_table import TurnTableConfig
+from src.config.training import TrainingConfig
+from src.config.semantic import SemanticConfig
 
 @dataclass
 class Config:
