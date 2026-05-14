@@ -322,7 +322,7 @@ def label_to_color(label_map, cfg: Config):
     return out
 
 def run_pseudo_label_pipeline(
-        views: List[str], 
+        image_names: List[str], 
         resized_path: Path, 
         mask_path: Path, 
         label_path: Path,
@@ -342,22 +342,21 @@ def run_pseudo_label_pipeline(
     t0 = time.time()
     stats = {}
 
-    for view_key in tqdm(views, desc="Pseudo-labels"):
-        fname     = f"{view_key}.png"
-        img_path  = resized_path / fname
-        mask_path = mask_path / fname
+    for image_name in tqdm(image_names, desc="Pseudo-labels"):
+        img_path  = resized_path / image_name
+        mask_path = mask_path / image_name
 
-        img_full = cv2.imread(str(img_path))
-        raw_mask = cv2.imread(str(mask_path), cv2.IMREAD_GRAYSCALE)
+        img_full = cv2.imread(img_path)
+        raw_mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
 
         if img_full is None or raw_mask is None:
-            print(f"  WARNING: missing file for view '{view_key}', skipping")
+            print(f"  WARNING: missing file for view '{image_name}', skipping")
             continue
 
         mask    = (raw_mask > 10).astype(np.uint8) * 255
         img_rgb = cv2.cvtColor(img_full, cv2.COLOR_BGR2RGB)
 
-        if view_key == 'top':
+        if image_name == 'top.png':
             label_map    = generate_topview_label(img_path, mask_path)
             leaf_tip_pts = []
         else:
@@ -367,11 +366,12 @@ def run_pseudo_label_pipeline(
                     img_rgb, label_map, mask, leaf_tip_pts, predictor)
 
         # Save
-        np.save(str(label_path / f"{view_key}.npy"), label_map)
-        cv2.imwrite(str(label_vis_path / fname), label_to_color(label_map, cfg))
+        view = image_name.split('.')[0]
+        np.save(str(label_path / f"{view}.npy"), label_map)
+        cv2.imwrite(label_vis_path / image_name, label_to_color(label_map, cfg))
 
         classes, counts = np.unique(label_map, return_counts=True)
-        stats[view_key] = {cfg.semantic.class_names[c]: int(n)
+        stats[image_name] = {cfg.semantic.class_names[c]: int(n)
                            for c, n in zip(classes, counts)}
 
     elapsed = (time.time() - t0) / 60
@@ -379,7 +379,7 @@ def run_pseudo_label_pipeline(
 
     print(f"{'view':>5}  {'bg':>8} {'leaf':>8} {'stem':>7} {'pet':>8} {'apex':>7}")
     print('-' * 50)
-    for vk in views:
+    for vk in image_names:
         if vk not in stats:
             continue
         s = stats[vk]
@@ -391,35 +391,30 @@ def run_pseudo_label_pipeline(
     return stats
 
 def visualize_pipeline_output(
-        views: List[str], 
+        image_names: List[str], 
         resized_path: Path, 
         mask_path: Path, 
         label_path: Path, 
         checkpoint_path: Path,
         cfg: Config, 
-        angles_to_show=None,
         ):
-    if angles_to_show is None:
-        angles_to_show = views[:5]
 
-    fig, axes = plt.subplots(4, len(angles_to_show),
-                             figsize=(4 * len(angles_to_show), 14))
+    fig, axes = plt.subplots(4, len(image_names),
+                             figsize=(4 * len(image_names), 14))
     row_labels = ['RGB', 'Silhouette', 'Labels', 'Overlay']
 
-    for i, view_key in enumerate(angles_to_show):
-        fname   = f"{view_key}.png"
-        img = cv2.imread(resized_path / fname)
+    for i, image_name in enumerate(image_names):
 
-        orig_bgr = cv2.imread(str(resized_path / fname))
-        maskv_raw = cv2.imread(str(mask_path / fname), cv2.IMREAD_GRAYSCALE)
+        orig_bgr = cv2.imread(resized_path / image_name)
+        maskv_raw = cv2.imread(mask_path / image_name, cv2.IMREAD_GRAYSCALE)
 
         if orig_bgr is None or maskv_raw is None:
-            print(f"[WARN] Missing image or mask for visualization: {fname}")
+            print(f"[WARN] Missing image or mask for visualization: {image_name}")
             continue
 
         orig    = cv2.cvtColor(orig_bgr, cv2.COLOR_BGR2RGB)
-        maskv   = cv2.imread(mask_path / fname, cv2.IMREAD_GRAYSCALE)
-        lmap    = np.load(label_path / f"{view_key}.npy")
+        maskv   = cv2.imread(mask_path / image_name, cv2.IMREAD_GRAYSCALE)
+        lmap    = np.load(label_path / f"{image_name}.npy")
         lvis    = cv2.cvtColor(label_to_color(lmap, cfg=cfg), cv2.COLOR_BGR2RGB)
         overlay = np.clip(orig.astype(float) * 0.5 +
                           lvis.astype(float) * 0.5, 0, 255).astype(np.uint8)
@@ -431,7 +426,7 @@ def visualize_pipeline_output(
             if i == 0:
                 axes[row][i].set_ylabel(row_labels[row], fontsize=9)
             if row == 0:
-                axes[row][i].set_title(view_key, fontsize=10)
+                axes[row][i].set_title(image_name, fontsize=10)
 
     handles = [
         mpatches.Patch(
@@ -457,26 +452,26 @@ def visualize_top_view(
         ):
     view_key = "top"
 
-    fname = f"{view_key}.png"
+    view = f"{view_key}.png"
 
     # Safety check
-    if not (resized_path / fname).exists():
+    if not (resized_path / view).exists():
         print("Top image not found.")
         return
-    if not (mask_path / fname).exists():
+    if not (mask_path / view).exists():
         print("Top mask not found.")
         return
     if not (label_path / f"{view_key}.npy").exists():
         print("Top label not found.")
         return
 
-    orig_bgr = cv2.imread(str(resized_path / fname))
-    maskv_raw = cv2.imread(str(mask_path / fname), cv2.IMREAD_GRAYSCALE)
+    orig_bgr = cv2.imread(str(resized_path / view))
+    maskv_raw = cv2.imread(str(mask_path / view), cv2.IMREAD_GRAYSCALE)
     lmap = np.load(label_path / f"{view_key}.npy")
     lvis = cv2.cvtColor(label_to_color(lmap, cfg), cv2.COLOR_BGR2RGB)
 
     if orig_bgr is None or maskv_raw is None:
-            print(f"[WARN] Missing image or mask for visualization: {fname}")
+            print(f"[WARN] Missing image or mask for visualization: {view}")
             return
 
 
