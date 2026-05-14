@@ -346,8 +346,12 @@ def run_pseudo_label_pipeline(
         img_path  = resized_path / image_name
         mask_path = mask_path / image_name
 
+        print(img_path)
+        print(mask_path)
+
         img_full = cv2.imread(img_path)
         raw_mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
+
 
         if img_full is None or raw_mask is None:
             print(f"  WARNING: missing file for view '{image_name}', skipping")
