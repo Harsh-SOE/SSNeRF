@@ -1,0 +1,15 @@
+segment-anything
+open3d
+trimesh
+scikit-image
+scipy
+tqdm
+albumentations
+scikit-learn
+networkx
+matplotlib
+opencv-python-headless
+timm
+fast-simplification
+ExifRead
+rembg[gpu]
