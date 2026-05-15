@@ -3,6 +3,8 @@ import numpy as np
 from pathlib import Path
 from typing import Optional
 
+# Side view alignment
+
 def detect_pot_axis_x(raw_path: Path, debug_dir: Optional[Path]):
     """
     Detects the projected x-coordinate of the pot / turntable axis.
@@ -164,3 +166,170 @@ def align_image_horizontally_to_axis(in_path: Path, out_path: Path, axis_x):
 
     cv2.imwrite(str(out_path), aligned)
     return dx
+
+
+# Top view alginment
+
+def detect_pot_circle_hough(
+    image_bgr: np.ndarray,
+    min_radius_frac: float = 0.15,
+    max_radius_frac: float = 0.45,
+):
+    """
+    Detect circular pot rim in a top-view image.
+
+    Returns:
+        cx, cy, radius
+    """
+
+    h, w = image_bgr.shape[:2]
+
+    gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
+
+    gray = cv2.GaussianBlur(gray, (9, 9), 2.0)
+
+    min_r = int(min(h, w) * min_radius_frac)
+    max_r = int(min(h, w) * max_radius_frac)
+
+    circles = cv2.HoughCircles(
+        gray,
+        cv2.HOUGH_GRADIENT,
+        dp=1.2,
+        minDist=min(h, w) * 0.3,
+        param1=120,
+        param2=35,
+        minRadius=min_r,
+        maxRadius=max_r,
+    )
+
+    if circles is None:
+        raise RuntimeError("Pot circle was not detected. Try tuning radius fractions or param2.")
+
+    circles = np.round(circles[0]).astype(np.float32)
+
+    # Usually strongest candidate
+    cx, cy, r = circles[0]
+
+    return float(cx), float(cy), float(r)
+
+
+def align_top_view(
+    image_bgr: np.ndarray,
+    pot_center_xy: tuple[float, float],
+    rotate_deg: float = 0.0,
+    border_value=(0, 0, 0),
+):
+    """
+    Align top-view image while keeping the original image size.
+
+    The pot center / turntable axis is moved to the image center.
+
+    If rotate_deg != 0:
+        rotation is applied around the pot center first,
+        then the pot center is translated to image center.
+
+    Important:
+        This moves the whole image.
+        It does NOT move the plant independently.
+    """
+
+    h, w = image_bgr.shape[:2]
+
+    cx, cy = pot_center_xy
+
+    target_cx = w / 2.0
+    target_cy = h / 2.0
+
+    # Rotation around detected pot center
+    M = cv2.getRotationMatrix2D((cx, cy), rotate_deg, 1.0)
+
+    # Then translate pot center to image center
+    dx = target_cx - cx
+    dy = target_cy - cy
+
+    M[0, 2] += dx
+    M[1, 2] += dy
+
+    aligned = cv2.warpAffine(
+        image_bgr,
+        M,
+        (w, h),  # keep original size
+        flags=cv2.INTER_LINEAR,
+        borderMode=cv2.BORDER_CONSTANT,
+        borderValue=border_value,
+    )
+
+    return aligned, M
+
+def save_debug_circle(image_bgr, pot_center_xy, pot_radius, save_path):
+    debug = image_bgr.copy()
+
+    cx, cy = map(int, pot_center_xy)
+    r = int(pot_radius)
+
+    cv2.circle(debug, (cx, cy), r, (0, 255, 0), 5)
+    cv2.circle(debug, (cx, cy), 12, (0, 0, 255), -1)
+
+    cv2.imwrite(str(save_path), debug)
+
+
+def process_top_view(
+    input_path: Path,
+    output_path: Path,
+    top_view_angle_deg: float = 0.0,
+    canonicalize_pixels: bool = False,
+):
+    """
+    Process top-view image while preserving original image size.
+
+    Recommended for your case:
+        canonicalize_pixels=False
+
+    That means:
+        - do not rotate pixels
+        - keep image as 342° top-view image
+        - pass 342° in the top-view pose
+    """
+
+    image_bgr = cv2.imread(str(input_path))
+
+    if image_bgr is None:
+        raise FileNotFoundError(f"Could not read image: {input_path}")
+
+    cx, cy, r = detect_pot_circle_hough(image_bgr)
+
+    print(f"Detected pot center: x={cx:.2f}, y={cy:.2f}, radius={r:.2f}")
+
+    debug_path = output_path.with_name(output_path.stem + "_debug_circle.jpg")
+    save_debug_circle(image_bgr, (cx, cy), r, debug_path)
+
+    if canonicalize_pixels:
+        # Convert 342° image to canonical 0°.
+        # -342° is equivalent to +18°.
+        rotate_deg = -top_view_angle_deg
+        pose_angle_to_use = 0.0
+    else:
+        # Recommended: keep raw orientation.
+        rotate_deg = 0.0
+        pose_angle_to_use = top_view_angle_deg
+
+    aligned_bgr, M = align_top_view(
+        image_bgr=image_bgr,
+        pot_center_xy=(cx, cy),
+        rotate_deg=rotate_deg,
+    )
+
+    cv2.imwrite(str(output_path), aligned_bgr)
+
+    print(f"Saved aligned top view: {output_path}")
+    print(f"Saved debug circle:     {debug_path}")
+    print(f"Use top pose angle:     {pose_angle_to_use:.2f} degrees")
+
+    return {
+        "pot_center": (cx, cy),
+        "pot_radius": r,
+        "affine_matrix": M,
+        "pose_angle_deg": pose_angle_to_use,
+        "output_path": str(output_path),
+        "debug_path": str(debug_path),
+    }
