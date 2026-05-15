@@ -58,16 +58,16 @@ def build_initial_poses(image_names: List[str], plant_target: np.ndarray, cfg: C
     radius = cfg.camera.camera_radius
 
     for image_name in image_names:
-        if image_name == 'top.png' and cfg.rotation.use_top_view:
+        rotation_angle = image_name.split('.')[0]
+        if rotation_angle == 'top' and cfg.rotation.use_top_view:
             eye = plant_target + np.array([0.0, radius * 1.25, 0.15], dtype=np.float32)
-            poses[image_name] = look_at(
+            poses[rotation_angle] = look_at(
                 eye,
                 target=plant_target,
                 up=np.array([0., 0., 1.], dtype=np.float32)
             )
         else:
-            rotation_angle = image_name.split('.')[0]
-            ar = math.radians(int(rotation_angle))
+            ar = math.radians(-int(rotation_angle))
             eye = plant_target + np.array([
                 radius * math.sin(ar),
                 0.0,
