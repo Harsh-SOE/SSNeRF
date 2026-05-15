@@ -9,7 +9,7 @@ class TrainingConfig:
     n_samples_fine: int = 128
 
     batch_rays: int = 4096
-    num_iters: int = 4_000
+    num_iters: int = 10_000
 
     lr: float = 3e-4
     pose_lr: float = 1e-3
