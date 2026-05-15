@@ -9,7 +9,7 @@ class TrainingConfig:
     n_samples_fine: int = 128
 
     batch_rays: int = 4096
-    num_iters: int = 10_000
+    num_iters: int = 4_000
 
     lr: float = 3e-4
     pose_lr: float = 1e-3
@@ -27,15 +27,15 @@ class TrainingConfig:
     sil_decay_start_pct: float = 0.7
 
     enable_sem: bool = True
-    sem_start_iters: int = 7500
+    sem_start_iters: int = 37500
     sem_ramp_iters: int = 1000
 
     enable_top_view_refinement: bool = True
-    top_view_start_iter: int = 3750
+    top_view_start_iter: int = 33750
     top_view_pose_ramp_iters: int = 500
 
     enable_pose_refinement: bool = True
-    pose_start_iter: int = 3750
+    pose_start_iter: int = 33750
     pose_ramp_iters: int = 1000
 
     log_every: int = 200
