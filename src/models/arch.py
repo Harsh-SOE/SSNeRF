@@ -2,51 +2,74 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from src.models.hash_encoding import HashEncoding, SmallDirEnc
+from src.models.hash_encoding import ProgressiveHashEncoding, SmallDirEnc
 
 class SemanticNeRF(nn.Module):
     def __init__(self, plant_bound: float, num_classes):
         super().__init__()
-        self.hash_enc = HashEncoding()
+
+        self.hash_enc = ProgressiveHashEncoding(
+            n_levels=16,
+            n_features=2,
+            log2_table=18,
+            base_res=8,
+            max_res=512,
+            start_level=4,
+            warmup_start=500,
+            warmup_end=6000,
+        )
+
         self.dir_enc  = SmallDirEnc()
-        h = self.hash_enc.out_dim   
-        d = self.dir_enc.out_dim    
+
+        h = self.hash_enc.out_dim
+        d = self.dir_enc.out_dim
         self.plant_bound = plant_bound
 
         self.trunk = nn.Sequential(
-            nn.Linear(h,  128), nn.SiLU(),
+            nn.Linear(h, 128), nn.SiLU(),
             nn.Linear(128, 128), nn.SiLU(),
             nn.Linear(128, 128), nn.SiLU(),
             nn.Linear(128, 128), nn.SiLU(),
         )
-        self.density_head  = nn.Linear(128, 1)
-        self.color_head    = nn.Sequential(
+
+        self.density_head = nn.Linear(128, 1)
+
+        self.color_head = nn.Sequential(
             nn.Linear(128 + d, 64), nn.SiLU(),
             nn.Linear(64, 3), nn.Sigmoid()
         )
+
         self.semantic_head = nn.Sequential(
             nn.Linear(128, 64), nn.SiLU(),
             nn.Linear(64, num_classes)
         )
+
         nn.init.constant_(self.density_head.bias, -4.0)
 
         self.register_buffer(
-            'current_step',
+            "current_step",
             torch.tensor(0, dtype=torch.long)
         )
-        self.sem_grad_warmup = 2000
 
     def update_step(self, step: int):
-        """Call once per training step, before the forward pass."""
         self.current_step.fill_(step)
 
     def forward(self, pos, dirs):
-      pos_normalized = pos / self.plant_bound
-      x = self.trunk(self.hash_enc(pos_normalized))
-      density = F.softplus(self.density_head(x))
-      color = self.color_head(torch.cat([x, self.dir_enc(dirs)], -1))
-      semantics = self.semantic_head(x.detach())
-      return density, color, semantics
+        pos_normalized = pos / self.plant_bound
+        dirs = F.normalize(dirs, dim=-1)
+
+        inside = (pos_normalized.abs() <= 1.0).all(dim=-1, keepdim=True)
+
+        x = self.trunk(self.hash_enc(pos_normalized))
+
+        density = F.softplus(self.density_head(x))
+        density = density * inside.float()
+
+        color = self.color_head(torch.cat([x, self.dir_enc(dirs)], -1))
+
+        semantics = self.semantic_head(x.detach())
+
+        return density, color, semantics
 
 def volume_render(density, color, semantics, z_vals, rays_d):
     deltas = torch.cat([
