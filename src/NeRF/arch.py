@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from src.models.hash_encoding import ProgressiveHashEncoding, SmallDirEnc
+from src.NeRF.hash_encoding import ProgressiveHashEncoding, SmallDirEnc
 
 class SemanticNeRF(nn.Module):
     def __init__(self, plant_bound: float, num_classes):

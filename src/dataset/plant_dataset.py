@@ -5,7 +5,7 @@ import numpy as np
 import cv2
 import torch
 
-from src.models.arch import get_rays
+from src.NeRF.arch import get_rays
 from src.config.project import Config
 
 class PlantDataset:

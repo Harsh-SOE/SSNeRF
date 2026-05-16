@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from typing import List
 
-from src.models.poses import axis_angle_to_matrix
+from src.NeRF.poses import axis_angle_to_matrix
 
 class PoseRefiner(nn.Module):
     def __init__(self, base_poses: dict, views: List[str]):
