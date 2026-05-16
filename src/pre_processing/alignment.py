@@ -1,7 +1,9 @@
 import cv2
 import numpy as np
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Dict
+
+from src.config.project import Config
 
 # Side view alignment
 
@@ -140,10 +142,10 @@ def detect_pot_axis_x(raw_path: Path, debug_dir: Optional[Path]):
 
     return axis_x, {"ok": True, "image": img, "component": component}
 
-def align_image_horizontally_to_axis(in_path: Path, out_path: Path, axis_x):
-    img = cv2.imread(in_path)
+def align_image_horizontally_to_axis(input_path: Path, output_path: Path, axis_x):
+    img = cv2.imread(input_path)
     if img is None:
-        raise ValueError(f"Could not read image: {in_path}")
+        raise ValueError(f"Could not read image: {input_path}")
 
     H, W = img.shape[:2]
 
@@ -164,8 +166,59 @@ def align_image_horizontally_to_axis(in_path: Path, out_path: Path, axis_x):
         borderValue=(0, 0, 0)
     )
 
-    cv2.imwrite(str(out_path), aligned)
+    cv2.imwrite(str(output_path), aligned)
     return dx
+
+
+def process_side_views(
+        image_names: List[str], 
+        input_path: Path, 
+        aligned_axis_path: Path, 
+        axis_debug_path: Path, 
+        cfg: Config
+        ) -> Dict[str, float]:
+    axis_measurements: Dict[str, float] = {}
+
+    print("Detecting pot / turntable axis from raw images...")
+    for image_name in image_names:
+        image_path = input_path / image_name
+        axis_x, _ = detect_pot_axis_x(raw_path=image_path, debug_dir=axis_debug_path)
+        img = cv2.imread(image_path)
+
+        if img is None:
+            raise FileNotFoundError(f"Image not found: {image_path}")
+
+        H, W = img.shape[:2]
+
+        axis_measurements[image_name] = float(axis_x)
+
+        resized_offset = (axis_x - W / 2.0) * (cfg.camera.resized_w / W)
+
+        print(
+            f"{image_name:>10} | axis_x={axis_x:8.2f} | "
+            f"raw_offset={axis_x - W/2:+7.2f}px | "
+            f"resized_offset={resized_offset:+6.2f}px"
+        )
+
+    print("\nWriting per-image axis-aligned raw images...")
+
+    for image_name in image_names:
+        output_path = aligned_axis_path / image_name
+        image_path = input_path / image_name
+        axis_x = axis_measurements[image_name]
+
+        dx = align_image_horizontally_to_axis(
+            input_path=image_path, 
+            output_path=output_path, 
+            axis_x=axis_x
+            )
+        
+        print(
+            f"{image_name:>10} | used_axis={axis_x:8.2f} | "
+            f"shifted by dx={dx:+.2f}px"
+        )
+
+    return axis_measurements
 
 
 # Top view alginment
