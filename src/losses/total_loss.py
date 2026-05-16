@@ -53,7 +53,7 @@ def compute_total_loss(
 
     t_sil = max(0.4, 1.0 - 0.6 * min(1.0, step /
                (config.training.num_iters * config.training.sil_decay_start_pct)))
-    w_sil = 2.0 * t_sil
+    w_sil = config.training.lambda_sil * t_sil
 
     w_sem = 0.0
     if step >= config.training.sem_start_iters:
