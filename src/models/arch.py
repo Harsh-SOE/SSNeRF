@@ -54,6 +54,9 @@ class SemanticNeRF(nn.Module):
     def update_step(self, step: int):
         self.current_step.fill_(step)
 
+        if hasattr(self.hash_enc, "update_step"):
+            self.hash_enc.update_step(step)
+
     def forward(self, pos, dirs):
         pos_normalized = pos / self.plant_bound
         dirs = F.normalize(dirs, dim=-1)
