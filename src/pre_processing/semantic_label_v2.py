@@ -60,10 +60,6 @@ def safe_skeletonize(binary: Any) -> BoolArray:
     return np.asarray(skel, dtype=np.bool_)
 
 
-# ============================================================
-# CLASS IDS
-# ============================================================
-
 BG = 0
 LEAF = 1
 STEM = 2
@@ -71,10 +67,6 @@ PETIOLE = 3
 APEX = 4
 IGNORE = 255
 
-
-# ============================================================
-# BASIC UTILITIES
-# ============================================================
 
 def read_image_and_mask(img_path: Path, mask_path: Path):
     img_bgr = cv2.imread(str(img_path), cv2.IMREAD_COLOR)
@@ -159,11 +151,6 @@ def remove_tiny_components(binary: np.ndarray, min_area: int = 20) -> BoolArray:
 
     return out
 
-
-# ============================================================
-# CONSERVATIVE STEM DETECTION
-# ============================================================
-
 def find_visible_stem_path(
     skel_binary: np.ndarray,
     plant: dict,
@@ -196,9 +183,6 @@ def find_visible_stem_path(
 
     max_dist = float(mask_dist.max()) + 1e-6
 
-    # --------------------------------------------------------
-    # 1. Find root / lower stem hub
-    # --------------------------------------------------------
     lower_y = int(plant["rmin"] + 0.45 * pH)
     lower_nodes = [n for n in nodes if n[0] >= lower_y]
 
@@ -215,7 +199,6 @@ def find_visible_stem_path(
         branch_bonus = 1.0 if deg >= 3 else 0.0
         lower_bonus = (r - plant["rmin"]) / pH
 
-        # Avoid choosing far-side leaf tips as root.
         return (
             2.2 * thickness +
             1.8 * centrality +
@@ -226,10 +209,6 @@ def find_visible_stem_path(
     root = max(lower_nodes, key=root_score)
     root_r, root_c = root
 
-    # --------------------------------------------------------
-    # 2. Weighted graph:
-    #    penalize side wandering and thin boundary paths
-    # --------------------------------------------------------
     for u, v in G.edges:
         ur, uc = u
         vr, vc = v
@@ -245,9 +224,6 @@ def find_visible_stem_path(
             0.3 * downward_penalty
         )
 
-    # --------------------------------------------------------
-    # 3. Candidate upper targets
-    # --------------------------------------------------------
     min_vertical_gain = max(5, int(0.12 * pH))
     max_allowed_xdev = max(12, int(0.30 * pW))
 
@@ -272,9 +248,6 @@ def find_visible_stem_path(
     if not candidates:
         return [], 0.0
 
-    # --------------------------------------------------------
-    # 4. Score candidate paths
-    # --------------------------------------------------------
     best_path: List[Tuple[int, int]] = []
     best_score = -1e9
 
@@ -360,11 +333,6 @@ def path_to_region(
 
     return stem_region
 
-
-# ============================================================
-# CONSERVATIVE PETIOLE DETECTION
-# ============================================================
-
 def find_petiole_paths_v2(
     skel_binary: np.ndarray,
     stem_region: np.ndarray,
@@ -448,11 +416,6 @@ def find_petiole_paths_v2(
         leaf_tip_pts.append((int(tip[0]), int(tip[1])))
 
     return petiole_masks, leaf_tip_pts
-
-
-# ============================================================
-# SIDE VIEW LABEL GENERATION
-# ============================================================
 
 def generate_morphology_label(
     img_path: Path,
@@ -547,12 +510,7 @@ def generate_morphology_label(
 
     return label_map, leaf_tip_pts
 
-
-# ============================================================
-# TOP VIEW LABEL GENERATION
-# ============================================================
-
-def generate_topview_label(
+def generate_topview_label_v2(
     img_path: Path,
     mask_path: Path,
     label_apex: bool = True,
@@ -581,7 +539,6 @@ def generate_topview_label(
     cx, cy = plant["cx"], plant["cy"]
     plant_radius = max(plant["pH"], plant["pW"]) / 2.0
 
-    # Stem/hub disc.
     stem_r = max(6, int(plant_radius * 0.12))
     stem_canvas = np.zeros((H, W), dtype=np.uint8)
     cv2.circle(stem_canvas, (cx, cy), stem_r, 255, -1)
@@ -610,7 +567,6 @@ def generate_topview_label(
         (label_map != STEM)
     ] = PETIOLE
 
-    # Apex as small central keypoint-like region.
     if label_apex:
         apex_r = max(3, int(plant_radius * 0.035))
         cv2.circle(label_map, (cx, cy), apex_r, APEX, -1)
@@ -618,20 +574,6 @@ def generate_topview_label(
     label_map[mask == 0] = BG
 
     return label_map
-
-
-# ============================================================
-# OPTIONAL SAM LEAF REFINEMENT
-# ============================================================
-
-def load_sam_predictor(checkpoint_path, device):
-    from segment_anything import sam_model_registry, SamPredictor
-
-    sam = sam_model_registry["vit_h"](checkpoint=str(checkpoint_path))
-    sam.to(device)
-
-    print("SAM-H loaded.")
-    return SamPredictor(sam)
 
 
 def refine_leaves_with_sam(
@@ -779,11 +721,6 @@ def make_training_safe_label_map(
 
     return safe
 
-
-# ============================================================
-# VISUALIZATION
-# ============================================================
-
 def label_to_color(label_map: np.ndarray, cfg: Config):
     H, W = label_map.shape
     out = np.zeros((H, W, 3), dtype=np.uint8)
@@ -807,7 +744,7 @@ def get_class_name(cid: int, cfg: Config) -> str:
         return f"class_{cid}"
 
 
-def visualize_single_label(
+def visualize_single_label_v2(
     image_path: Path,
     mask_path: Path,
     label_map: np.ndarray,
@@ -848,11 +785,6 @@ def visualize_single_label(
 
     plt.tight_layout()
     plt.show()
-
-
-# ============================================================
-# MAIN PIPELINE
-# ============================================================
 
 def run_pseudo_label_pipeline_v2(
     image_names: List[str],
@@ -913,7 +845,7 @@ def run_pseudo_label_pipeline_v2(
         img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
 
         if image_name == "top.png":
-            label_map = generate_topview_label(
+            label_map = generate_topview_label_v2(
                 img_path=image_path,
                 mask_path=image_mask_path,
                 label_apex=True,
@@ -995,12 +927,7 @@ def run_pseudo_label_pipeline_v2(
 
     return stats
 
-
-# ============================================================
-# PIPELINE VISUALIZATION
-# ============================================================
-
-def visualize_pipeline_output(
+def visualize_pipeline_output_v2(
     image_names: List[str],
     resized_path: Path,
     mask_path: Path,
@@ -1120,7 +1047,7 @@ def visualize_pipeline_output(
     print(f"Saved → {out_path}")
 
 
-def visualize_top_view(
+def visualize_top_view_v2(
     resized_path: Path,
     mask_path: Path,
     label_path: Path,
